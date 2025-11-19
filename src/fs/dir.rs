@@ -11,10 +11,114 @@ use std::fs::DirEntry;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::slice::Iter as SliceIter;
+use std::collections::HashSet;
 
-use log::info;
+use log::{info, warn, debug};
+use serde::Deserialize;
 
 use crate::fs::File;
+
+#[derive(Deserialize)]
+struct Manifest {
+    #[serde(flatten)]
+    entries: std::collections::HashMap<String, serde_json::Value>,
+}
+
+fn get_ghosts<'dir>(dir: &'dir Dir) -> Vec<File<'dir>> {
+    // Canonicalize the path to handle both relative and absolute paths
+    let canonical_path = match dir.path.canonicalize() {
+        Ok(p) => p,
+        Err(e) => {
+            debug!("Failed to canonicalize path {:?}: {}", dir.path, e);
+            return vec![];
+        }
+    };
+    
+    // 1. Find the src root and manifest
+    let mut current = canonical_path.as_path();
+    let mut src_root = None;
+    
+    loop {
+        if current.file_name().map_or(false, |n| n == "src") {
+            let manifest_path = current.join(".meta/manifest.json");
+            if manifest_path.exists() {
+                src_root = Some(current.to_path_buf());
+                break;
+            }
+        }
+        match current.parent() {
+            Some(p) => current = p,
+            None => break,
+        }
+    }
+
+    let src_root = match src_root {
+        Some(p) => p,
+        None => return vec![],
+    };
+
+    // 2. Read manifest
+    let manifest_path = src_root.join(".meta/manifest.json");
+    let file = match std::fs::File::open(&manifest_path) {
+        Ok(f) => f,
+        Err(e) => {
+            debug!("Failed to open manifest at {:?}: {}", manifest_path, e);
+            return vec![];
+        }
+    };
+    let reader = io::BufReader::new(file);
+    let manifest: Manifest = match serde_json::from_reader(reader) {
+        Ok(m) => m,
+        Err(e) => {
+            warn!("Failed to parse manifest at {:?}: {}", manifest_path, e);
+            return vec![];
+        }
+    };
+
+    // 3. Determine relative path and prefix
+    let rel_path = match canonical_path.strip_prefix(&src_root) {
+        Ok(p) => p,
+        Err(_) => return vec![],
+    };
+    
+    let prefix = if rel_path.as_os_str().is_empty() {
+        "//".to_string()
+    } else {
+        format!("//{}/", rel_path.to_string_lossy())
+    };
+
+    // 4. Identify ghost children (both direct and intermediate)
+    let mut ghosts = Vec::new();
+    let existing_names: HashSet<String> = dir.contents.iter()
+        .map(|e| File::filename(&e.path()))
+        .collect();
+
+    // Track all intermediate directories we need to create ghosts for
+    let mut ghost_names: HashSet<String> = HashSet::new();
+
+    for key in manifest.entries.keys() {
+        if let Some(suffix) = key.strip_prefix(&prefix) {
+            if !suffix.is_empty() {
+                // Get the first component of the path
+                let first_component = suffix.split('/').next().unwrap();
+                
+                // If this component doesn't exist physically, it should be a ghost
+                if !existing_names.contains(first_component) {
+                    ghost_names.insert(first_component.to_string());
+                }
+            }
+        }
+    }
+
+    // Create ghost nodes for all identified names
+    for name in ghost_names {
+        let ghost_path = dir.path.join(&name);
+        ghosts.push(File::new_ghost(ghost_path, dir, name));
+    }
+
+
+    ghosts
+}
 
 /// A **Dir** provides a cached list of the file paths in a directory that’s
 /// being listed.
@@ -84,7 +188,14 @@ impl Dir {
         git_ignoring: bool,
         deref_links: bool,
         total_size: bool,
+        no_ghosts: bool,
     ) -> Files<'dir, 'ig> {
+        let ghosts = if no_ghosts {
+            vec![]
+        } else {
+            get_ghosts(self)
+        };
+
         Files {
             inner: self.contents.iter(),
             dir: self,
@@ -94,6 +205,7 @@ impl Dir {
             git_ignoring,
             deref_links,
             total_size,
+            ghosts: ghosts.into_iter(),
         }
     }
 
@@ -135,6 +247,9 @@ pub struct Files<'dir, 'ig> {
 
     /// Whether to calculate the directory size recursively
     total_size: bool,
+
+    /// Iterator over ghost files to be displayed
+    ghosts: std::vec::IntoIter<File<'dir>>,
 }
 
 impl<'dir> Files<'dir, '_> {
@@ -228,7 +343,12 @@ impl<'dir> Iterator for Files<'dir, '_> {
                 ))
             }
 
-            DotsNext::Files => self.next_visible_file(),
+            DotsNext::Files => {
+                if let Some(f) = self.next_visible_file() {
+                    return Some(f);
+                }
+                self.ghosts.next()
+            }
         }
     }
 }

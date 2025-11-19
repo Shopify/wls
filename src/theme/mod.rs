@@ -82,7 +82,7 @@ impl Options {
             // Failed to enable ansi support, probably because legacy mode console.
             // No need to alert the user unless they explicitly set color=always
             if self.use_colours == UseColours::Always {
-                eprintln!("eza: Ignoring option color=always in legacy console.");
+                eprintln!("wls: Ignoring option color=always in legacy console.");
             }
             let ui = UiStyles::plain();
             let exts = Box::new(NoFileStyle);
@@ -471,6 +471,7 @@ impl FileNameColours for Theme {
     fn broken_control_char(&self) -> Style { apply_overlay(self.ui.control_char(),   self.ui.broken_path_overlay()) }
     fn executable_file(&self)     -> Style { self.ui.filekinds.unwrap_or_default().executable() }
     fn mount_point(&self)         -> Style { self.ui.filekinds.unwrap_or_default().mount_point() }
+    fn ghost(&self)               -> Style { self.ui.filekinds.unwrap_or_default().ghost() }
 
     fn colour_file(&self, file: &File<'_>) -> Style {
         self.exts

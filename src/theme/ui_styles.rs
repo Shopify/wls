@@ -128,6 +128,7 @@ pub struct FileKinds {
     pub special: Option<Style>,       // sp
     pub executable: Option<Style>,    // ex
     pub mount_point: Option<Style>,   // mp
+    pub ghost: Option<Style>,         // gh
 }
 
 impl Default for FileKinds {
@@ -143,6 +144,7 @@ impl Default for FileKinds {
             special: Some(Yellow.normal()),
             executable: Some(Green.bold()),
             mount_point: Some(Blue.bold().underline()),
+            ghost: Some(Style::default().dimmed().italic()),
         }
     }
 }
@@ -157,7 +159,8 @@ field_accessors!(
     socket: Option<Style>,
     special: Option<Style>,
     executable: Option<Style>,
-    mount_point: Option<Style>
+    mount_point: Option<Style>,
+    ghost: Option<Style>
 );
 
 #[rustfmt::skip]
@@ -402,6 +405,7 @@ impl UiStyles {
             special: Some(Style::default()),
             executable: Some(Style::default()),
             mount_point: Some(Style::default()),
+            ghost: Some(Style::default()),
             }),
 
             #[rustfmt::skip]
@@ -523,6 +527,7 @@ impl UiStyles {
             "cd" => self.filekinds().char_device  = Some(pair.to_style()),  // CHR
             "ln" => self.filekinds().symlink      = Some(pair.to_style()),  // LINK
             "or" => self.broken_symlink         = Some(pair.to_style()),  // ORPHAN
+            "gh" => self.filekinds().ghost        = Some(pair.to_style()),  // GHOST
              _   => return false,
              // Codes we don’t do anything with:
              // MULTIHARDLINK, DOOR, SETUID, SETGID, CAPABILITY,
@@ -532,7 +537,7 @@ impl UiStyles {
     }
 
     /// Sets a value on this set of colours using one of the keys understood
-    /// by the `EZA_COLORS` environment variable. Invalid keys set nothing,
+    /// by the `WLS_COLORS` environment variable. Invalid keys set nothing,
     /// but return false. This doesn’t take the `LS_COLORS` keys into account,
     /// so `set_ls` should have been run first.
     #[rustfmt::skip]

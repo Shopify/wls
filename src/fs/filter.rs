@@ -41,6 +41,9 @@ pub enum FileFilterFlags {
     /// Whether directories should be listed as the last items, after other
     /// types of file. Some users prefer it like this.
     ListDirsLast,
+
+    /// Whether to disable ghost nodes
+    NoGhosts,
 }
 
 /// The **file filter** processes a list of files before displaying them to
@@ -90,6 +93,9 @@ pub struct FileFilter {
 
     /// Whether to explicitly show symlinks
     pub show_symlinks: bool,
+
+    /// Whether to disable ghost nodes
+    pub no_ghosts: bool,
 }
 
 impl FileFilter {

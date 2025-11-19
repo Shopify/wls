@@ -26,7 +26,7 @@ impl Default for ThemeConfig {
         ThemeConfig {
             location: dirs::config_dir()
                 .unwrap_or_default()
-                .join("eza")
+                .join("wls")
                 .join("theme.yml"),
         }
     }
@@ -273,6 +273,7 @@ pub struct FileKindsOverride {
     pub special: Option<StyleOverride>,       // sp
     pub executable: Option<StyleOverride>,    // ex
     pub mount_point: Option<StyleOverride>,   // mp
+    pub ghost: Option<StyleOverride>,         // gh
 }
 
 impl FromOverride<FileKindsOverride> for FileKinds {
@@ -288,6 +289,7 @@ impl FromOverride<FileKindsOverride> for FileKinds {
             special: FromOverride::from(value.special, default.special),
             executable: FromOverride::from(value.executable, default.executable),
             mount_point: FromOverride::from(value.mount_point, default.mount_point),
+            ghost: FromOverride::from(value.ghost, default.ghost),
         }
     }
 }

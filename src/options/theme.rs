@@ -35,7 +35,7 @@ impl Options {
 
 impl ThemeConfig {
     fn deduce<V: Vars>(vars: &V) -> Option<Self> {
-        if let Some(path) = vars.get("EZA_CONFIG_DIR") {
+        if let Some(path) = vars.get("WLS_CONFIG_DIR").or_else(|| vars.get("EZA_CONFIG_DIR")) {
             let path = PathBuf::from(path);
             let theme = path.join("theme.yml");
             if theme.exists() {
@@ -48,6 +48,16 @@ impl ThemeConfig {
             None
         } else {
             let path = dirs::config_dir().unwrap_or_default();
+            let wls_path = path.join("wls");
+            let wls_theme = wls_path.join("theme.yml");
+            if wls_theme.exists() {
+                return Some(ThemeConfig::from_path(wls_theme));
+            }
+            let wls_theme = wls_path.join("theme.yaml");
+            if wls_theme.exists() {
+                return Some(ThemeConfig::from_path(wls_theme));
+            }
+
             let path = path.join("eza");
             let theme = path.join("theme.yml");
             if theme.exists() {
@@ -93,7 +103,8 @@ impl Definitions {
             .get(vars::LS_COLORS)
             .map(|e| e.to_string_lossy().to_string());
         let exa = vars
-            .get_with_fallback(vars::EZA_COLORS, vars::EXA_COLORS)
+            .get(vars::WLS_COLORS)
+            .or_else(|| vars.get_with_fallback(vars::EZA_COLORS, vars::EXA_COLORS))
             .map(|e| e.to_string_lossy().to_string());
         Self { ls, exa }
     }

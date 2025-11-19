@@ -57,7 +57,11 @@ fn main() {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
 
-    logger::configure(env::var_os(vars::EZA_DEBUG).or_else(|| env::var_os(vars::EXA_DEBUG)));
+    logger::configure(
+        env::var_os(vars::WLS_DEBUG)
+            .or_else(|| env::var_os(vars::EZA_DEBUG))
+            .or_else(|| env::var_os(vars::EXA_DEBUG)),
+    );
 
     let stdout_istty = io::stdout().is_terminal();
 
@@ -132,7 +136,7 @@ fn main() {
         }
 
         OptionsResult::InvalidOptions(error) => {
-            eprintln!("eza: {error}");
+            eprintln!("wls: {error}");
 
             if let Some(s) = error.suggestion() {
                 eprintln!("{s}");
@@ -359,6 +363,7 @@ impl Exa<'_> {
                 git_ignore,
                 self.options.view.deref_links,
                 self.options.view.total_size,
+                self.options.filter.no_ghosts,
             ) {
                 children.push(file);
             }

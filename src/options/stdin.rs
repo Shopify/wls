@@ -5,7 +5,7 @@
 // SPDX-FileCopyrightText: 2014 Benjamin Sago
 // SPDX-License-Identifier: MIT
 use crate::options::parser::MatchedFlags;
-use crate::options::vars::EZA_STDIN_SEPARATOR;
+use crate::options::vars::{EZA_STDIN_SEPARATOR, WLS_STDIN_SEPARATOR};
 use crate::options::{flags, OptionsError, Vars};
 use std::ffi::OsString;
 use std::io;
@@ -22,7 +22,8 @@ impl FilesInput {
         Ok(
             if matches.has(&flags::STDIN)? || !io::stdin().is_terminal() {
                 let separator = vars
-                    .get(EZA_STDIN_SEPARATOR)
+                    .get(WLS_STDIN_SEPARATOR)
+                    .or_else(|| vars.get(EZA_STDIN_SEPARATOR))
                     .unwrap_or(OsString::from("\n"));
                 FilesInput::Stdin(separator)
             } else {

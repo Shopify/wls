@@ -28,6 +28,7 @@ impl FileFilter {
             (matches.has(&flags::SHOW_SYMLINKS)?, FFF::ShowSymlinks),
             (matches.has(&flags::DIRS_LAST)?, FFF::ListDirsLast),
             (matches.has(&flags::DIRS_FIRST)?, FFF::ListDirsFirst),
+            (matches.has(&flags::NO_GHOSTS)?, FFF::NoGhosts),
         ] {
             if *has {
                 filter_flags.push(flag.clone());
@@ -38,11 +39,12 @@ impl FileFilter {
         return Ok(Self {
             no_symlinks:      filter_flags.contains(&FFF::NoSymlinks),
             show_symlinks:    filter_flags.contains(&FFF::ShowSymlinks),
-            flags:            filter_flags,
+            flags:            filter_flags.clone(),
             sort_field:       SortField::deduce(matches)?,
             dot_filter:       DotFilter::deduce(matches)?,
             ignore_patterns:  IgnorePatterns::deduce(matches)?,
             git_ignore:       GitIgnore::deduce(matches)?,
+            no_ghosts:        filter_flags.contains(&FFF::NoGhosts),
         });
     }
 }

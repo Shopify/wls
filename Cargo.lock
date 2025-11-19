@@ -410,41 +410,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "eza"
-version = "0.23.4"
-dependencies = [
- "ansi-width",
- "backtrace",
- "chrono",
- "criterion",
- "dirs",
- "git2",
- "glob",
- "libc",
- "locale",
- "log",
- "natord-plus-plus",
- "nu-ansi-term",
- "number_prefix",
- "palette",
- "path-clean",
- "percent-encoding",
- "phf",
- "plist",
- "proc-mounts",
- "rayon",
- "serde",
- "serde_norway",
- "terminal_size",
- "timeago",
- "trycmd",
- "unicode-width 0.2.2",
- "uutils_term_grid",
- "uzers",
- "windows-sys 0.60.2",
-]
-
-[[package]]
 name = "fast-srgb8"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2012,6 +1977,42 @@ name = "wit-bindgen"
 version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
+
+[[package]]
+name = "wls"
+version = "0.23.4"
+dependencies = [
+ "ansi-width",
+ "backtrace",
+ "chrono",
+ "criterion",
+ "dirs",
+ "git2",
+ "glob",
+ "libc",
+ "locale",
+ "log",
+ "natord-plus-plus",
+ "nu-ansi-term",
+ "number_prefix",
+ "palette",
+ "path-clean",
+ "percent-encoding",
+ "phf",
+ "plist",
+ "proc-mounts",
+ "rayon",
+ "serde",
+ "serde_json",
+ "serde_norway",
+ "terminal_size",
+ "timeago",
+ "trycmd",
+ "unicode-width 0.2.2",
+ "uutils_term_grid",
+ "uzers",
+ "windows-sys 0.60.2",
+]
 
 [[package]]
 name = "writeable"

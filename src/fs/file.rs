@@ -116,6 +116,9 @@ pub struct File<'dir> {
 
     /// The absolute value of this path, used to look up mount points.
     absolute_path: OnceLock<Option<PathBuf>>,
+
+    /// Whether this file is a "ghost" node (exists in manifest but not on disk).
+    pub is_ghost: bool,
 }
 
 impl<'dir> File<'dir> {
@@ -163,6 +166,7 @@ impl<'dir> File<'dir> {
             metadata: OnceLock::new(),
             extended_attributes: OnceLock::new(),
             absolute_path: OnceLock::new(),
+            is_ghost: false,
         };
 
         if total_size {
@@ -200,6 +204,7 @@ impl<'dir> File<'dir> {
             absolute_path: OnceLock::new(),
             extended_attributes: OnceLock::new(),
             filetype: OnceLock::new(),
+            is_ghost: false,
         };
 
         if total_size {
@@ -217,6 +222,32 @@ impl<'dir> File<'dir> {
     #[must_use]
     pub fn new_aa_parent(path: PathBuf, parent_dir: &'dir Dir, total_size: bool) -> File<'dir> {
         File::new_aa(path, parent_dir, "..", total_size)
+    }
+
+    pub fn new_ghost(
+        path: PathBuf,
+        parent_dir: &'dir Dir,
+        name: String,
+    ) -> File<'dir> {
+        let ext = File::ext(&path);
+        let is_all_all = false;
+        let parent_dir = Some(parent_dir);
+        let recursive_size = RecursiveSize::None;
+
+        File {
+            name,
+            ext,
+            path,
+            parent_dir,
+            is_all_all,
+            deref_links: false,
+            recursive_size,
+            metadata: OnceLock::new(),
+            absolute_path: OnceLock::new(),
+            extended_attributes: OnceLock::new(),
+            filetype: OnceLock::new(),
+            is_ghost: true,
+        }
     }
 
     /// A file’s name is derived from its string. This needs to handle directories
@@ -294,6 +325,9 @@ impl<'dir> File<'dir> {
 
     /// Whether this file is a directory on the filesystem.
     pub fn is_directory(&self) -> bool {
+        if self.is_ghost {
+            return true;
+        }
         self.filetype().is_some_and(std::fs::FileType::is_dir)
     }
 
@@ -335,6 +369,9 @@ impl<'dir> File<'dir> {
     /// Whether this file is a regular file on the filesystem — that is, not a
     /// directory, a link, or anything else treated specially.
     pub fn is_file(&self) -> bool {
+        if self.is_ghost {
+            return false;
+        }
         self.filetype().is_some_and(std::fs::FileType::is_file)
     }
 
@@ -343,6 +380,9 @@ impl<'dir> File<'dir> {
     /// executable directory, so they should be highlighted differently.
     #[cfg(unix)]
     pub fn is_executable_file(&self) -> bool {
+        if self.is_ghost {
+            return false;
+        }
         let bit = modes::USER_EXECUTE;
         if !self.is_file() {
             return false;
@@ -355,35 +395,53 @@ impl<'dir> File<'dir> {
 
     /// Whether this file is a symlink on the filesystem.
     pub fn is_link(&self) -> bool {
+        if self.is_ghost {
+            return false;
+        }
         self.filetype().is_some_and(FileType::is_symlink)
     }
 
     /// Whether this file is a named pipe on the filesystem.
     #[cfg(unix)]
     pub fn is_pipe(&self) -> bool {
+        if self.is_ghost {
+            return false;
+        }
         self.filetype().is_some_and(FileTypeExt::is_fifo)
     }
 
     /// Whether this file is a char device on the filesystem.
     #[cfg(unix)]
     pub fn is_char_device(&self) -> bool {
+        if self.is_ghost {
+            return false;
+        }
         self.filetype().is_some_and(FileTypeExt::is_char_device)
     }
 
     /// Whether this file is a block device on the filesystem.
     #[cfg(unix)]
     pub fn is_block_device(&self) -> bool {
+        if self.is_ghost {
+            return false;
+        }
         self.filetype().is_some_and(FileTypeExt::is_block_device)
     }
 
     /// Whether this file is a socket on the filesystem.
     #[cfg(unix)]
     pub fn is_socket(&self) -> bool {
+        if self.is_ghost {
+            return false;
+        }
         self.filetype().is_some_and(FileTypeExt::is_socket)
     }
 
     /// Determine the full path resolving all symbolic links on demand.
     pub fn absolute_path(&self) -> Option<&PathBuf> {
+        if self.is_ghost {
+            return Some(&self.path);
+        }
         self.absolute_path
             .get_or_init(|| {
                 if self.is_link() && self.link_target().is_broken() {
@@ -403,6 +461,9 @@ impl<'dir> File<'dir> {
 
     /// Whether this file is a mount point
     pub fn is_mount_point(&self) -> bool {
+        if self.is_ghost {
+            return false;
+        }
         cfg!(any(target_os = "linux", target_os = "macos"))
             && self.is_directory()
             && self
@@ -476,6 +537,7 @@ impl<'dir> File<'dir> {
                     extended_attributes,
                     absolute_path: absolute_path_cell,
                     recursive_size: RecursiveSize::None,
+                    is_ghost: false,
                 };
                 FileTarget::Ok(Box::new(file))
             }
@@ -516,6 +578,12 @@ impl<'dir> File<'dir> {
     /// more attentively.
     #[cfg(unix)]
     pub fn links(&self) -> f::Links {
+        if self.is_ghost {
+            return f::Links {
+                count: 0,
+                multiple: false,
+            };
+        }
         let count = self.metadata().map_or(0, MetadataExt::nlink);
 
         f::Links {
@@ -527,12 +595,18 @@ impl<'dir> File<'dir> {
     /// This file’s inode.
     #[cfg(unix)]
     pub fn inode(&self) -> f::Inode {
+        if self.is_ghost {
+            return f::Inode(0);
+        }
         f::Inode(self.metadata().map_or(0, MetadataExt::ino))
     }
 
     /// This actual size the file takes up on disk, in bytes.
     #[cfg(unix)]
     pub fn blocksize(&self) -> f::Blocksize {
+        if self.is_ghost {
+            return f::Blocksize::None;
+        }
         if self.deref_links && self.is_link() {
             match self.link_target() {
                 FileTarget::Ok(f) => f.blocksize(),
@@ -553,10 +627,13 @@ impl<'dir> File<'dir> {
         }
     }
 
-    /// The ID of the user that own this file. If dereferencing links, the links
+    /// The ID of the user that owns this file. If dereferencing links, the links
     /// may be broken, in which case `None` will be returned.
     #[cfg(unix)]
     pub fn user(&self) -> Option<f::User> {
+        if self.is_ghost {
+            return Some(f::User(0));
+        }
         if self.is_link() && self.deref_links {
             return match self.link_target_recurse() {
                 FileTarget::Ok(f) => f.user(),
@@ -591,6 +668,10 @@ impl<'dir> File<'dir> {
     /// links) if dereferencing is enabled, otherwise None.
     #[cfg(unix)]
     pub fn size(&self) -> f::Size {
+        if self.is_ghost {
+            return f::Size::Some(0);
+        }
+
         if self.deref_links && self.is_link() {
             match self.link_target() {
                 FileTarget::Ok(f) => f.size(),
@@ -629,19 +710,6 @@ impl<'dir> File<'dir> {
         }
     }
 
-    /// Returns the size of the file or indicates no size if it's a directory.
-    ///
-    /// For Windows platforms, the size of directories is not computed and will
-    /// return `Size::None`.
-    #[cfg(windows)]
-    pub fn size(&self) -> f::Size {
-        if self.is_directory() {
-            f::Size::None
-        } else {
-            f::Size::Some(self.metadata().map_or(0, std::fs::Metadata::len))
-        }
-    }
-
     /// Calculate the total directory size recursively.  If not a directory `None`
     /// will be returned.  The directory size is cached for recursive directory
     /// listing.
@@ -658,7 +726,7 @@ impl<'dir> File<'dir> {
             Dir::read_dir(self.path.clone()).map_or(RecursiveSize::Unknown, |dir| {
                 let mut size = 0;
                 let mut blocks = 0;
-                for file in dir.files(super::DotFilter::Dotfiles, None, false, false, true) {
+                for file in dir.files(super::DotFilter::Dotfiles, None, false, false, true, true) {
                     match file.recursive_directory_size() {
                         RecursiveSize::Some(bytes, blks) => {
                             size += bytes;
@@ -759,7 +827,7 @@ impl<'dir> File<'dir> {
         match Dir::read_dir(self.path.clone()) {
             // . & .. are skipped, if the returned iterator has .next(), it's not empty
             Ok(has_files) => has_files
-                .files(super::DotFilter::Dotfiles, None, false, false, false)
+                .files(super::DotFilter::Dotfiles, None, false, false, false, true)
                 .next()
                 .is_none(),
             Err(_) => false,
@@ -780,8 +848,11 @@ impl<'dir> File<'dir> {
         .map(|dt| dt.naive_local())
     }
 
-    /// This file’s last modified timestamp, if available on this platform.
+    /// The time the file was modified.
     pub fn modified_time(&self) -> Option<NaiveDateTime> {
+        if self.is_ghost {
+            return None;
+        }
         if self.is_link() && self.deref_links {
             return match self.link_target_recurse() {
                 FileTarget::Ok(f) => f.modified_time(),
@@ -797,6 +868,9 @@ impl<'dir> File<'dir> {
     /// This file’s last changed timestamp, if available on this platform.
     #[cfg(unix)]
     pub fn changed_time(&self) -> Option<NaiveDateTime> {
+        if self.is_ghost {
+            return None;
+        }
         if self.is_link() && self.deref_links {
             return match self.link_target_recurse() {
                 FileTarget::Ok(f) => f.changed_time(),
@@ -818,6 +892,9 @@ impl<'dir> File<'dir> {
 
     /// This file’s last accessed timestamp, if available on this platform.
     pub fn accessed_time(&self) -> Option<NaiveDateTime> {
+        if self.is_ghost {
+            return None;
+        }
         if self.is_link() && self.deref_links {
             return match self.link_target_recurse() {
                 FileTarget::Ok(f) => f.accessed_time(),
@@ -832,6 +909,9 @@ impl<'dir> File<'dir> {
 
     /// This file’s created timestamp, if available on this platform.
     pub fn created_time(&self) -> Option<NaiveDateTime> {
+        if self.is_ghost {
+            return None;
+        }
         if self.is_link() && self.deref_links {
             return match self.link_target_recurse() {
                 FileTarget::Ok(f) => f.created_time(),
@@ -849,6 +929,9 @@ impl<'dir> File<'dir> {
     /// ls puts this character there.
     #[cfg(unix)]
     pub fn type_char(&self) -> f::Type {
+        if self.is_ghost {
+            return f::Type::Directory;
+        }
         if self.is_file() {
             f::Type::File
         } else if self.is_directory() {
@@ -882,6 +965,9 @@ impl<'dir> File<'dir> {
     /// This file’s permissions, with flags for each bit.
     #[cfg(unix)]
     pub fn permissions(&self) -> Option<f::Permissions> {
+        if self.is_ghost {
+            return None;
+        }
         if self.is_link() && self.deref_links {
             // If the chain of links is broken, we instead fall through and
             // return the permissions of the original link, as would have been

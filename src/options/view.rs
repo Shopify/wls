@@ -227,15 +227,16 @@ impl TerminalWidth {
 
 impl RowThreshold {
     fn deduce<V: Vars>(vars: &V) -> Result<Self, OptionsError> {
-        if let Some(columns) = vars
-            .get_with_fallback(vars::EZA_GRID_ROWS, vars::EXA_GRID_ROWS)
+                if let Some(columns) = vars
+            .get(vars::WLS_GRID_ROWS)
+            .or_else(|| vars.get_with_fallback(vars::EZA_GRID_ROWS, vars::EXA_GRID_ROWS))
             .and_then(|s| s.into_string().ok())
         {
             match columns.parse() {
                 Ok(rows) => Ok(Self::MinimumRows(rows)),
                 Err(e) => {
                     let source = NumberSource::Env(
-                        vars.source(vars::EZA_GRID_ROWS, vars::EXA_GRID_ROWS)
+                        vars.source(vars::WLS_GRID_ROWS, vars::EZA_GRID_ROWS)
                             .unwrap(),
                     );
                     Err(OptionsError::FailedParse(columns, source, e))
@@ -271,7 +272,8 @@ impl Columns {
         let time_types = TimeTypes::deduce(matches)?;
 
         let no_git_env = vars
-            .get_with_fallback(vars::EXA_OVERRIDE_GIT, vars::EZA_OVERRIDE_GIT)
+            .get(vars::WLS_OVERRIDE_GIT)
+            .or_else(|| vars.get_with_fallback(vars::EXA_OVERRIDE_GIT, vars::EZA_OVERRIDE_GIT))
             .is_some();
 
         let git = matches.has(&flags::GIT)? && !matches.has(&flags::NO_GIT)? && !no_git_env;
@@ -469,7 +471,10 @@ impl TimeTypes {
 impl ColorScaleOptions {
     pub fn deduce<V: Vars>(matches: &MatchedFlags<'_>, vars: &V) -> Result<Self, OptionsError> {
         let min_luminance =
-            match vars.get_with_fallback(vars::EZA_MIN_LUMINANCE, vars::EXA_MIN_LUMINANCE) {
+            match vars
+                .get(vars::WLS_MIN_LUMINANCE)
+                .or_else(|| vars.get_with_fallback(vars::EZA_MIN_LUMINANCE, vars::EXA_MIN_LUMINANCE))
+            {
                 Some(var) => match var.to_string_lossy().parse() {
                     Ok(luminance) if (-100..=100).contains(&luminance) => luminance,
                     _ => 40,

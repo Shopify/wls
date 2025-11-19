@@ -11,11 +11,13 @@ use crate::options::flags;
 use crate::options::parser::MatchedFlags;
 
 static USAGE_PART1: &str = "Usage:
-  eza [options] [files...]
+  wls [options] [files...]
+
+  wls is a patched version of eza for monorepo environments.
 
 META OPTIONS
   -?, --help                 show list of command-line options
-  -v, --version              show version of eza
+  -v, --version              show version of wls
 
 DISPLAY OPTIONS
   -1, --oneline              display one entry per line

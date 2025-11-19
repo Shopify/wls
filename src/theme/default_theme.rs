@@ -40,6 +40,7 @@ impl Default for UiStyles {
             special: Some(Yellow.normal()),
             executable: Some(Green.bold()),
             mount_point: Some(Blue.bold().underline()),
+            ghost: Some(Style::default().dimmed().italic()),
             }),
 
             #[rustfmt::skip]
