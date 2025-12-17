@@ -17,7 +17,7 @@
 /// - <https://crates.io/crates/vergen>
 use std::env;
 use std::fs::File;
-use std::io::{self, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
 
 use chrono::prelude::*;
@@ -58,7 +58,90 @@ fn main() -> io::Result<()> {
         File::create(path).unwrap_or_else(|_| panic!("{}", path.to_string_lossy().to_string()));
     writeln!(f, "{}", strip_codes(&ver))?;
 
+    // Generate compiled LS_COLORS from dircolors source
+    let ls_colors = compile_ls_colors("LS_COLORS")?;
+    let ls_colors_path = &out.join("ls_colors.txt");
+    let mut f = File::create(ls_colors_path)
+        .unwrap_or_else(|_| panic!("{}", ls_colors_path.to_string_lossy().to_string()));
+    write!(f, "{}", ls_colors)?;
+
+    // Tell Cargo to rerun if LS_COLORS changes
+    println!("cargo:rerun-if-changed=LS_COLORS");
+
     Ok(())
+}
+
+/// Compile a dircolors database file into LS_COLORS format.
+fn compile_ls_colors(path: &str) -> io::Result<String> {
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+    let mut entries = Vec::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        let line = line.trim();
+
+        // Skip empty lines and comments
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        // Skip TERM lines
+        if line.starts_with("TERM ") {
+            continue;
+        }
+
+        // Parse "KEY VALUE" or "KEY VALUE # comment"
+        let mut parts = line.splitn(2, char::is_whitespace);
+        let key = match parts.next() {
+            Some(k) => k,
+            None => continue,
+        };
+        let rest = match parts.next() {
+            Some(r) => r.trim(),
+            None => continue,
+        };
+
+        // Strip trailing comments from value
+        let value = rest.split('#').next().unwrap_or("").trim();
+        if value.is_empty() {
+            continue;
+        }
+
+        // Convert dircolors key to LS_COLORS key
+        let ls_key = match key {
+            "NORMAL" | "NORM" => "no".to_string(),
+            "FILE" => "fi".to_string(),
+            "RESET" | "RS" => "rs".to_string(),
+            "DIR" => "di".to_string(),
+            "LINK" | "LNK" | "SYMLINK" => "ln".to_string(),
+            "MULTIHARDLINK" => "mh".to_string(),
+            "FIFO" | "PIPE" => "pi".to_string(),
+            "SOCK" => "so".to_string(),
+            "DOOR" => "do".to_string(),
+            "BLK" | "BLOCK" => "bd".to_string(),
+            "CHR" | "CHAR" => "cd".to_string(),
+            "ORPHAN" => "or".to_string(),
+            "MISSING" => "mi".to_string(),
+            "SETUID" => "su".to_string(),
+            "SETGID" => "sg".to_string(),
+            "CAPABILITY" => "ca".to_string(),
+            "STICKY_OTHER_WRITABLE" => "tw".to_string(),
+            "OTHER_WRITABLE" => "ow".to_string(),
+            "STICKY" => "st".to_string(),
+            "EXEC" => "ex".to_string(),
+            // Extensions: .foo -> *.foo
+            k if k.starts_with('.') => format!("*{}", k),
+            // Already glob patterns: *foo stays *foo
+            k if k.starts_with('*') => k.to_string(),
+            // Unknown keys, pass through
+            k => k.to_string(),
+        };
+
+        entries.push(format!("{}={}", ls_key, value));
+    }
+
+    Ok(entries.join(":"))
 }
 
 /// Removes escape codes from a string.

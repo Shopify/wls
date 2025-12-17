@@ -97,11 +97,15 @@ impl UseColours {
     }
 }
 
+/// Bundled LS_COLORS compiled from dircolors source at build time.
+const BUNDLED_LS_COLORS: &str = include_str!(concat!(env!("OUT_DIR"), "/ls_colors.txt"));
+
 impl Definitions {
     fn deduce<V: Vars>(vars: &V) -> Self {
         let ls = vars
             .get(vars::LS_COLORS)
-            .map(|e| e.to_string_lossy().to_string());
+            .map(|e| e.to_string_lossy().to_string())
+            .or_else(|| Some(BUNDLED_LS_COLORS.to_string()));
         let exa = vars
             .get(vars::WLS_COLORS)
             .or_else(|| vars.get_with_fallback(vars::EZA_COLORS, vars::EXA_COLORS))
@@ -243,4 +247,58 @@ mod terminal_test {
     test!(overridden_6:  UseColours <- ["--color=auto",  "--colour=never"], MockVars::empty();  Complain => err OptionsError::Duplicate(Flag::Long("color"),  Flag::Long("colour")));
     test!(overridden_7:  UseColours <- ["--colour=auto", "--color=never"], MockVars::empty();   Complain => err OptionsError::Duplicate(Flag::Long("colour"), Flag::Long("color")));
     test!(overridden_8:  UseColours <- ["--color=auto",  "--color=never"], MockVars::empty();   Complain => err OptionsError::Duplicate(Flag::Long("color"),  Flag::Long("color")));
+}
+
+#[cfg(test)]
+mod bundled_ls_colors_test {
+    use super::*;
+    use crate::theme::Definitions;
+    use std::ffi::OsString;
+
+    struct EmptyVars;
+
+    impl Vars for EmptyVars {
+        fn get(&self, _name: &'static str) -> Option<OsString> {
+            None
+        }
+    }
+
+    struct WithLsColors(&'static str);
+
+    impl Vars for WithLsColors {
+        fn get(&self, name: &'static str) -> Option<OsString> {
+            if name == vars::LS_COLORS {
+                Some(OsString::from(self.0))
+            } else {
+                None
+            }
+        }
+    }
+
+    #[test]
+    fn bundled_ls_colors_is_non_empty() {
+        assert!(!BUNDLED_LS_COLORS.is_empty());
+    }
+
+    #[test]
+    fn bundled_ls_colors_has_expected_format() {
+        // Should contain key=value pairs separated by colons
+        assert!(BUNDLED_LS_COLORS.contains("di="));
+        assert!(BUNDLED_LS_COLORS.contains("ex="));
+        assert!(BUNDLED_LS_COLORS.contains(':'));
+    }
+
+    #[test]
+    fn uses_bundled_when_env_not_set() {
+        let defs = Definitions::deduce(&EmptyVars);
+        assert!(defs.ls.is_some());
+        assert_eq!(defs.ls.as_deref(), Some(BUNDLED_LS_COLORS));
+    }
+
+    #[test]
+    fn env_overrides_bundled() {
+        let custom = "di=1;34:fi=0";
+        let defs = Definitions::deduce(&WithLsColors(custom));
+        assert_eq!(defs.ls.as_deref(), Some(custom));
+    }
 }

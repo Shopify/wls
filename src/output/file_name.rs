@@ -328,16 +328,6 @@ impl<C: Colours> FileName<'_, '_, C> {
             }
         }
 
-        // Add zone sigil for directories that are zones
-        if !self.options.no_sigils && self.file.is_zone && self.file.is_directory() {
-            let sigil_style = if self.file.is_ghost {
-                self.colours.zone_sigil_ghost()
-            } else {
-                self.colours.zone_sigil()
-            };
-            bits.push(sigil_style.paint("𝜁"));
-        }
-
         if self.mount_style == MountStyle::MountInfo {
             if let Some(mount_details) = self.file.mount_point_info() {
                 // This is a filesystem mounted on the directory, output its details
@@ -490,8 +480,10 @@ impl<C: Colours> FileName<'_, '_, C> {
 
         #[rustfmt::skip]
         return match self.file {
+            f if f.is_ghost && f.is_zone => self.colours.ghost().bold(),
             f if f.is_ghost              => self.colours.ghost(),
             f if f.is_mount_point()      => self.colours.mount_point(),
+            f if f.is_directory() && f.is_zone => self.colours.directory().bold(),
             f if f.is_directory()        => self.colours.directory(),
             #[cfg(unix)]
             f if f.is_executable_file()  => self.colours.executable_file(),
