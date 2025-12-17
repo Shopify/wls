@@ -5,7 +5,7 @@
 // SPDX-FileCopyrightText: 2014 Benjamin Sago
 // SPDX-License-Identifier: MIT
 mod dir;
-pub use self::dir::{Dir, DotFilter};
+pub use self::dir::{Dir, DotFilter, is_valid_ghost_dir};
 
 mod file;
 pub use self::file::{File, FileTarget};

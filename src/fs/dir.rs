@@ -57,8 +57,59 @@ pub fn find_manifest(start_path: &Path) -> Option<ManifestInfo> {
         }
     };
 
+    find_manifest_from_canonical(&canonical_path)
+}
+
+/// Find manifest for a path that may not exist on disk.
+/// Walks up to find the nearest existing ancestor, canonicalizes that,
+/// then appends the remaining ghost path components.
+pub fn find_manifest_for_ghost(start_path: &Path) -> Option<(ManifestInfo, PathBuf)> {
+    // Convert relative paths to absolute by prepending cwd
+    let start_path = if start_path.is_relative() {
+        match std::env::current_dir() {
+            Ok(cwd) => cwd.join(start_path),
+            Err(_) => return None,
+        }
+    } else {
+        start_path.to_path_buf()
+    };
+
+    // Walk up to find the nearest existing ancestor
+    let mut existing_ancestor = start_path.clone();
+    let mut ghost_suffix_components: Vec<std::ffi::OsString> = Vec::new();
+
+    while !existing_ancestor.exists() {
+        if let Some(file_name) = existing_ancestor.file_name() {
+            ghost_suffix_components.push(file_name.to_os_string());
+        }
+        match existing_ancestor.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => {
+                existing_ancestor = parent.to_path_buf();
+            }
+            _ => return None,
+        }
+    }
+
+    // Reverse since we collected from bottom up
+    ghost_suffix_components.reverse();
+
+    // Canonicalize the existing ancestor
+    let canonical_ancestor = existing_ancestor.canonicalize().ok()?;
+
+    // Build the full "would-be canonical" path
+    let mut full_path = canonical_ancestor.clone();
+    for component in &ghost_suffix_components {
+        full_path.push(component);
+    }
+
+    let manifest_info = find_manifest_from_canonical(&canonical_ancestor)?;
+
+    Some((manifest_info, full_path))
+}
+
+fn find_manifest_from_canonical(canonical_path: &Path) -> Option<ManifestInfo> {
     // Find the src root
-    let mut current = canonical_path.as_path();
+    let mut current = canonical_path;
     let mut src_root = None;
 
     loop {
@@ -100,13 +151,37 @@ pub fn find_manifest(start_path: &Path) -> Option<ManifestInfo> {
     Some(ManifestInfo { src_root, entries })
 }
 
-fn get_ghosts<'dir>(dir: &'dir Dir, manifest_info: Option<&ManifestInfo>) -> Vec<File<'dir>> {
+/// Check if a non-existent path is a valid ghost directory.
+/// Returns Some(ManifestInfo, canonical_path) if it's a valid ghost.
+pub fn is_valid_ghost_dir(path: &Path) -> Option<(ManifestInfo, PathBuf)> {
+    let (manifest_info, canonical_path) = find_manifest_for_ghost(path)?;
+
+    // Build the target prefix (e.g., "//areas/core/")
+    let rel_path = canonical_path.strip_prefix(&manifest_info.src_root).ok()?;
+    let prefix = format!("//{}/", rel_path.to_string_lossy());
+
+    // Check if any manifest entry starts with this prefix
+    let has_children = manifest_info.entries.iter().any(|key| key.starts_with(&prefix));
+
+    if has_children {
+        Some((manifest_info, canonical_path))
+    } else {
+        None
+    }
+}
+
+fn get_ghosts<'dir>(dir: &'dir Dir, manifest_info: Option<&ManifestInfo>, ghost_canonical: Option<&PathBuf>) -> Vec<File<'dir>> {
     let Some(manifest_info) = manifest_info else {
         return vec![];
     };
 
-    let Ok(canonical_path) = dir.path.canonicalize() else {
-        return vec![];
+    // For ghost directories, use the pre-computed canonical path; otherwise canonicalize
+    let canonical_path = match ghost_canonical {
+        Some(p) => p.clone(),
+        None => match dir.path.canonicalize() {
+            Ok(p) => p,
+            Err(_) => return vec![],
+        },
     };
 
     // Determine relative path and prefix
@@ -155,7 +230,7 @@ fn get_ghosts<'dir>(dir: &'dir Dir, manifest_info: Option<&ManifestInfo>) -> Vec
     ghosts
 }
 
-/// A **Dir** provides a cached list of the file paths in a directory that’s
+/// A **Dir** provides a cached list of the file paths in a directory that's
 /// being listed.
 ///
 /// This object gets passed to the Files themselves, in order for them to
@@ -167,6 +242,10 @@ pub struct Dir {
 
     /// The path that was read.
     pub path: PathBuf,
+
+    /// For ghost directories: the pre-computed canonical path and manifest info.
+    /// Ghost directories don't exist on disk, so we can't canonicalize them normally.
+    ghost_info: Option<(ManifestInfo, PathBuf)>,
 }
 
 impl Dir {
@@ -179,7 +258,24 @@ impl Dir {
         Self {
             contents: vec![],
             path,
+            ghost_info: None,
         }
+    }
+
+    /// Create a new Dir for a ghost directory that doesn't exist on disk.
+    /// The manifest_info and canonical_path are pre-computed since we can't
+    /// canonicalize a non-existent path.
+    pub fn new_ghost(path: PathBuf, manifest_info: ManifestInfo, canonical_path: PathBuf) -> Self {
+        Self {
+            contents: vec![],
+            path,
+            ghost_info: Some((manifest_info, canonical_path)),
+        }
+    }
+
+    /// Returns true if this is a ghost directory.
+    pub fn is_ghost(&self) -> bool {
+        self.ghost_info.is_some()
     }
 
     /// Reads the contents of the directory into `DirEntry`.
@@ -187,7 +283,15 @@ impl Dir {
     /// It is recommended to use this method in conjunction with `new` in recursive
     /// calls, rather than `read_dir`, to avoid holding multiple open file descriptors
     /// simultaneously, which can lead to "too many open files" errors.
+    ///
+    /// For ghost directories, this is a no-op since they have no physical contents.
     pub fn read(&mut self) -> io::Result<&Self> {
+        // Ghost directories have no physical contents to read
+        if self.ghost_info.is_some() {
+            info!("Ghost directory {:?} - no physical contents", &self.path);
+            return Ok(self);
+        }
+
         info!("Reading directory {:?}", &self.path);
 
         self.contents = fs::read_dir(&self.path)?.collect::<Result<Vec<_>, _>>()?;
@@ -197,12 +301,12 @@ impl Dir {
     }
 
     /// Create a new Dir object filled with all the files in the directory
-    /// pointed to by the given path. Fails if the directory can’t be read, or
-    /// isn’t actually a directory, or if there’s an IO error that occurs at
+    /// pointed to by the given path. Fails if the directory can't be read, or
+    /// isn't actually a directory, or if there's an IO error that occurs at
     /// any point.
     ///
-    /// The `read_dir` iterator doesn’t actually yield the `.` and `..`
-    /// entries, so if the user wants to see them, we’ll have to add them
+    /// The `read_dir` iterator doesn't actually yield the `.` and `..`
+    /// entries, so if the user wants to see them, we'll have to add them
     /// ourselves after the files have been read.
     pub fn read_dir(path: PathBuf) -> io::Result<Self> {
         info!("Reading directory {:?}", &path);
@@ -210,7 +314,7 @@ impl Dir {
         let contents = fs::read_dir(&path)?.collect::<Result<Vec<_>, _>>()?;
 
         info!("Read directory success {:?}", &path);
-        Ok(Self { contents, path })
+        Ok(Self { contents, path, ghost_info: None })
     }
 
     /// Produce an iterator of IO results of trying to read all the files in
@@ -225,13 +329,19 @@ impl Dir {
         total_size: bool,
         no_ghosts: bool,
     ) -> Files<'dir, 'ig> {
-        // Load manifest once for this directory
-        let manifest_info = find_manifest(&self.path);
+        // For ghost dirs, use pre-loaded manifest; otherwise load it
+        let (manifest_info, ghost_canonical) = match &self.ghost_info {
+            Some((m, c)) => (Some(ManifestInfo {
+                src_root: m.src_root.clone(),
+                entries: m.entries.clone(),
+            }), Some(c.clone())),
+            None => (find_manifest(&self.path), None),
+        };
 
         let ghosts = if no_ghosts {
             vec![]
         } else {
-            get_ghosts(self, manifest_info.as_ref())
+            get_ghosts(self, manifest_info.as_ref(), ghost_canonical.as_ref())
         };
 
         Files {

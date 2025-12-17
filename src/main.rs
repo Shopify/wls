@@ -37,7 +37,7 @@ use nu_ansi_term::{AnsiStrings as ANSIStrings, Style};
 
 use crate::fs::feature::git::GitCache;
 use crate::fs::filter::{FileFilterFlags::OnlyFiles, GitIgnore};
-use crate::fs::{Dir, File};
+use crate::fs::{Dir, File, is_valid_ghost_dir};
 use crate::options::stdin::FilesInput;
 use crate::options::{vars, Options, OptionsResult, Vars};
 use crate::output::{details, escape, file_name, grid, grid_details, lines, Mode, View};
@@ -264,8 +264,9 @@ impl Exa<'_> {
         let mut exit_status = 0;
 
         for file_path in &self.input_paths {
+            let path = PathBuf::from(file_path);
             let f = File::from_args(
-                PathBuf::from(file_path),
+                path.clone(),
                 None,
                 None,
                 self.options.view.deref_links,
@@ -276,6 +277,12 @@ impl Exa<'_> {
             // We don't know whether this file exists, so we have to try to get
             // the metadata to verify.
             if let Err(e) = f.metadata() {
+                // Check if this is a valid ghost directory
+                if let Some((manifest_info, canonical_path)) = is_valid_ghost_dir(&path) {
+                    trace!("matched ghost directory: {:?}", path);
+                    dirs.push(Dir::new_ghost(path, manifest_info, canonical_path));
+                    continue;
+                }
                 exit_status = 2;
                 writeln!(io::stderr(), "{file_path:?}: {e}")?;
                 continue;
