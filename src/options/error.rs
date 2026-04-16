@@ -30,14 +30,14 @@ pub enum OptionsError {
     Conflict(&'static Arg, &'static Arg),
 
     /// An option was given that does nothing when another one either is or
-    /// isn’t present.
+    /// isn't present.
     Useless(&'static Arg, bool, &'static Arg),
 
     /// An option was given that does nothing when either of two other options
     /// are not present.
     Useless2(&'static Arg, &'static Arg, &'static Arg),
 
-    /// A very specific edge case where --tree can’t be used with --all twice.
+    /// A very specific edge case where --tree can't be used with --all twice.
     TreeAllAll,
 
     /// A numeric option was given that failed to be parsed as a number.
@@ -111,14 +111,7 @@ impl OptionsError {
     /// went wrong.
     #[must_use]
     pub fn suggestion(&self) -> Option<&'static str> {
-        // ‘ls -lt’ and ‘ls -ltr’ are common combinations
         match self {
-            Self::BadArgument(time, r) if *time == &flags::TIME && r == "r" => {
-                Some("To sort oldest files last, try \"--sort oldest\", or just \"-sold\"")
-            }
-            Self::Parse(ParseError::NeedsValue { ref flag, .. }) if *flag == Flag::Short(b't') => {
-                Some("To sort newest files last, try \"--sort newest\", or just \"-snew\"")
-            }
             _ => None,
         }
     }

@@ -55,9 +55,19 @@ impl SortField {
     /// Returns the default sort field if none is given, or `Err` if the
     /// value doesn’t correspond to a sort field we know about.
     fn deduce(matches: &MatchedFlags<'_>) -> Result<Self, OptionsError> {
+        let sort_time = matches.has(&flags::SORT_TIME)?;
+
         let Some(word) = matches.get(&flags::SORT)? else {
+            // -t with no --sort means sort by modification time (GNU ls compat)
+            if sort_time {
+                return Ok(Self::ModifiedDate);
+            }
             return Ok(Self::default());
         };
+
+        if sort_time {
+            return Err(OptionsError::Conflict(&flags::SORT_TIME, &flags::SORT));
+        }
 
         // Get String because we can’t match an OsStr
         let Some(word) = word.to_str() else {
@@ -223,6 +233,8 @@ mod test {
 
                 static TEST_ARGS: &[&Arg] = &[
                     &flags::SORT,
+                    &flags::SORT_TIME,
+                    &flags::REVERSE,
                     &flags::ALL,
                     &flags::ALMOST_ALL,
                     &flags::TREE,
@@ -255,6 +267,14 @@ mod test {
         test!(new:           SortField <- ["--sort", "old"];   Both => Ok(SortField::ModifiedAge));
         test!(newest:        SortField <- ["--sort=oldest"];   Both => Ok(SortField::ModifiedAge));
         test!(age:           SortField <- ["-sage"];           Both => Ok(SortField::ModifiedAge));
+
+        // -t flag (GNU ls compat: sort by modification time)
+        test!(sort_time:     SortField <- ["-t"];              Both => Ok(SortField::ModifiedDate));
+        test!(sort_time_long: SortField <- ["--sort-time"];     Both => Ok(SortField::ModifiedDate));
+        test!(sort_time_r:   SortField <- ["-tr"];             Both => Ok(SortField::ModifiedDate));
+
+        // -t conflicts with --sort
+        test!(sort_time_conflict: SortField <- ["-t", "--sort=name"]; Both => Err(OptionsError::Conflict(&flags::SORT_TIME, &flags::SORT)));
 
         test!(mix_hidden_lowercase:     SortField <- ["--sort", ".name"];  Both => Ok(SortField::NameMixHidden(SortCase::AaBbCc)));
         test!(mix_hidden_uppercase:     SortField <- ["--sort", ".Name"];  Both => Ok(SortField::NameMixHidden(SortCase::ABCabc)));

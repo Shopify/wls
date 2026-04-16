@@ -51,6 +51,7 @@ FILTERING AND SORTING OPTIONS
   -L, --level DEPTH          limit the depth of recursion
   -r, --reverse              reverse the sort order
   -s, --sort SORT_FIELD      which field to sort by
+  -t, --sort-time            sort by modification time, newest first (like ls -t)
   --group-directories-first  list directories before other files
   --group-directories-last   list directories after other files
   -I, --ignore-glob GLOBS    glob patterns (pipe-separated) of files to ignore";
@@ -75,7 +76,7 @@ LONG VIEW OPTIONS
   -n, --numeric              list numeric user and group IDs
   -O, --flags                list file flags (Mac, BSD, and Windows only)
   -S, --blocksize            show size of allocated file system blocks
-  -t, --time FIELD           which timestamp field to list (modified, accessed, created)
+  --time FIELD               which timestamp field to list (modified, accessed, created)
   -m, --modified             use the modified timestamp field
   -u, --accessed             use the accessed timestamp field
   -U, --created              use the created timestamp field
