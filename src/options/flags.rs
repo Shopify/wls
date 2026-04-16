@@ -45,6 +45,7 @@ pub static LIST_DIRS:           Arg = Arg { short: None, long: "list-dirs",   ta
 pub static LEVEL:               Arg = Arg { short: Some(b'L'), long: "level",       takes_value: TakesValue::Necessary(None) };
 pub static REVERSE:             Arg = Arg { short: Some(b'r'), long: "reverse",     takes_value: TakesValue::Forbidden };
 pub static SORT:                Arg = Arg { short: Some(b's'), long: "sort",        takes_value: TakesValue::Necessary(Some(SORTS)) };
+pub static SORT_TIME:           Arg = Arg { short: Some(b't'), long: "sort-time",   takes_value: TakesValue::Forbidden };
 pub static IGNORE_GLOB:         Arg = Arg { short: Some(b'I'), long: "ignore-glob", takes_value: TakesValue::Necessary(None) };
 pub static GIT_IGNORE:          Arg = Arg { short: None, long: "git-ignore",           takes_value: TakesValue::Forbidden };
 pub static DIRS_FIRST:          Arg = Arg { short: None, long: "group-directories-first",  takes_value: TakesValue::Forbidden };
@@ -73,7 +74,7 @@ pub static MODIFIED:    Arg = Arg { short: Some(b'm'), long: "modified",    take
 pub static CHANGED:     Arg = Arg { short: None,       long: "changed",     takes_value: TakesValue::Forbidden };
 pub static BLOCKSIZE:   Arg = Arg { short: Some(b'S'), long: "blocksize",   takes_value: TakesValue::Forbidden };
 pub static TOTAL_SIZE:  Arg = Arg { short: None,       long: "total-size",  takes_value: TakesValue::Forbidden };
-pub static TIME:        Arg = Arg { short: Some(b't'), long: "time",        takes_value: TakesValue::Necessary(Some(TIMES)) };
+pub static TIME:        Arg = Arg { short: None,       long: "time",        takes_value: TakesValue::Necessary(Some(TIMES)) };
 pub static ACCESSED:    Arg = Arg { short: Some(b'u'), long: "accessed",    takes_value: TakesValue::Forbidden };
 pub static CREATED:     Arg = Arg { short: Some(b'U'), long: "created",     takes_value: TakesValue::Forbidden };
 pub static TIME_STYLE:  Arg = Arg { short: None,       long: "time-style",  takes_value: TakesValue::Necessary(Some(TIME_STYLES)) };
@@ -107,7 +108,7 @@ pub static ALL_ARGS: Args = Args(&[
     &COLOR, &COLOUR, &COLOR_SCALE, &COLOUR_SCALE, &COLOR_SCALE_MODE, &COLOUR_SCALE_MODE,
     &WIDTH, &NO_QUOTES, &ABSOLUTE,
 
-    &ALL, &ALMOST_ALL, &TREAT_DIRS_AS_FILES, &LIST_DIRS, &LEVEL, &REVERSE, &SORT, &DIRS_FIRST, &DIRS_LAST,
+    &ALL, &ALMOST_ALL, &TREAT_DIRS_AS_FILES, &LIST_DIRS, &LEVEL, &REVERSE, &SORT, &SORT_TIME, &DIRS_FIRST, &DIRS_LAST,
     &IGNORE_GLOB, &GIT_IGNORE, &ONLY_DIRS, &ONLY_FILES,
 
     &BINARY, &BYTES, &GROUP, &NUMERIC, &HEADER, &ICONS, &INODE, &LINKS, &MODIFIED, &CHANGED,
